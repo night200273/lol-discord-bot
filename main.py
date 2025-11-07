@@ -77,6 +77,10 @@ async def on_ready():
     print(f"[Discord] Bot ID: {bot.user.id}")
     print(f"[Discord] 已連接到 {len(bot.guilds)} 個伺服器")
 
+    # 列出所有伺服器
+    for guild in bot.guilds:
+        print(f"[Discord] - 伺服器：{guild.name} (ID: {guild.id})")
+
 @bot.event
 async def on_message(message):
     # 印出所有訊息（除錯用）
