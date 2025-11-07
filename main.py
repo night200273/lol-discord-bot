@@ -26,20 +26,28 @@ app = Flask(__name__)
 #  全域變數
 # ======================
 queue = []  # 排隊名單
-AUTHORIZED_ROLES = ["慕笙寶寶", "管理員", "小幫手"]
+AUTHORIZED_ROLES = ["慕笙寶寶", "💟管理小幫手", "管理員", "小幫手"]
 MAX_PLAYERS = 4
 
 # ======================
 #  輔助函數
 # ======================
 def has_authority(member):
-    """檢查是否為授權身分"""
-    return any(role.name in AUTHORIZED_ROLES for role in member.roles)
+    """檢查是否為授權身分（支援模糊匹配）"""
+    for role in member.roles:
+        # 完全匹配
+        if role.name in AUTHORIZED_ROLES:
+            return True
+        # 模糊匹配：檢查是否包含關鍵字
+        if any(keyword in role.name for keyword in ["管理", "小幫手", "慕笙"]):
+            return True
+    return False
 
 def get_role_type(member):
     """判斷身份組（祖宗 or 圖奇）"""
     for role in member.roles:
-        if role.name == "祖宗":
+        # 檢查身分組名稱是否包含「祖宗」關鍵字
+        if "祖宗" in role.name:
             return "祖宗"
     return "圖奇"
 
