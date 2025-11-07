@@ -131,6 +131,10 @@ async def 查清單(ctx):
 @bot.command()
 async def 換人(ctx):
     """執行換人邏輯：前2祖宗優先 + 後2位依排隊順序"""
+    # 除錯：印出使用者的身分組
+    print(f"[除錯-換人] {ctx.author.display_name} 的身分組：{[role.name for role in ctx.author.roles]}")
+    print(f"[除錯-換人] 權限檢查結果：{has_authority(ctx.author)}")
+
     if not has_authority(ctx.author):
         await ctx.send("⛔ 只有慕笙寶寶、管理員或小幫手能使用這個指令！")
         return
@@ -140,7 +144,7 @@ async def 換人(ctx):
         await ctx.send("⚠️ 目前沒有人排隊")
         return
 
-    # 分離祖宗與圖奇
+    # 分離祖宗與圖奇/主播
     ancestors = [m for m in queue if get_role_type(m) == "祖宗"]
 
     # 組出這一輪的上場名單
@@ -165,7 +169,11 @@ async def 換人(ctx):
     msg = "🎮 **本輪上場：**\n"
     for m in new_round:
         role_type = get_role_type(m)
-        icon = "🔴" if role_type == "祖宗" else "⚪"
+        # 根據不同身分顯示不同圖示
+        if role_type == "祖宗":
+            icon = "🔴"
+        else:
+            icon = "⚪"
         msg += f"{icon} {m.display_name}（{role_type}）\n"
 
     if queue:
