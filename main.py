@@ -129,6 +129,43 @@ async def 查清單(ctx):
     await ctx.send(msg)
 
 @bot.command()
+async def 查看(ctx):
+    """查看當前上場4人和預備候補4人"""
+    if not queue:
+        await ctx.send("📭 目前沒有人排隊喔～")
+        return
+
+    # 當前上場：前4位
+    current_players = queue[:MAX_PLAYERS]
+    # 預備候補：第5-8位
+    next_players = queue[MAX_PLAYERS:MAX_PLAYERS*2]
+
+    msg = "🎮 **當前上場：**\n"
+    if current_players:
+        for i, member in enumerate(current_players, start=1):
+            role_type = get_role_type(member)
+            icon = "🔴" if role_type == "祖宗" else "⚪"
+            msg += f"{icon} {i}. {member.display_name}（{role_type}）\n"
+    else:
+        msg += "（無）\n"
+
+    msg += "\n🕓 **預備候補：**\n"
+    if next_players:
+        for i, member in enumerate(next_players, start=5):
+            role_type = get_role_type(member)
+            icon = "⚪"
+            msg += f"{icon} {i}. {member.display_name}（{role_type}）\n"
+    else:
+        msg += "（無）\n"
+
+    # 如果還有更多人在排隊
+    remaining = len(queue) - MAX_PLAYERS * 2
+    if remaining > 0:
+        msg += f"\n📋 還有 {remaining} 人在排隊中..."
+
+    await ctx.send(msg)
+
+@bot.command()
 async def 換人(ctx):
     """執行換人邏輯：前2祖宗優先 + 後2位依排隊順序"""
     # 除錯：印出使用者的身分組
