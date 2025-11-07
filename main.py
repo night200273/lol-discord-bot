@@ -91,12 +91,15 @@ async def on_message(message):
 async def 上車(ctx):
     """加入排隊名單"""
     user = ctx.author
+    print(f"[指令-上車] {user.display_name} 執行上車指令")
+
     if user in queue:
         position = queue.index(user) + 1
         await ctx.send(f"🚗 {user.display_name} 已在排隊中！（第 {position} 位）")
         return
 
     queue.append(user)
+    print(f"[指令-上車] {user.display_name} 成功加入，目前第 {len(queue)} 位")
     await ctx.send(f"✅ {user.display_name} 成功上車，目前第 **{len(queue)} 位**")
 
 @bot.command()
