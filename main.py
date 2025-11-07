@@ -22,9 +22,33 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Flask 網頁伺服器（用於 Render 端口檢測）
 app = Flask(__name__)
 
+# ======================
+#  全域變數
+# ======================
+queue = []  # 排隊名單
+AUTHORIZED_ROLES = ["慕笙寶寶", "管理員", "小幫手"]
+MAX_PLAYERS = 4
+
+# ======================
+#  輔助函數
+# ======================
+def has_authority(member):
+    """檢查是否為授權身分"""
+    return any(role.name in AUTHORIZED_ROLES for role in member.roles)
+
+def get_role_type(member):
+    """判斷身份組（祖宗 or 圖奇）"""
+    for role in member.roles:
+        if role.name == "祖宗":
+            return "祖宗"
+    return "圖奇"
+
+# ======================
+#  Flask 路由
+# ======================
 @app.route('/')
 def home():
-    return "LOL Discord Bot is running! ✅"
+    return "LOL 上車系統 Bot is running! ✅"
 
 @app.route('/health')
 def health():
@@ -36,9 +60,12 @@ def run_web_server():
     print(f"[Flask] 啟動網頁伺服器於端口 {port}")
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
+# ======================
+#  Discord Bot 事件
+# ======================
 @bot.event
 async def on_ready():
-    print(f"[Discord] Bot 登入成功: {bot.user}")
+    print(f"[Discord] ✅ Bot 登入成功: {bot.user}")
     print(f"[Discord] Bot ID: {bot.user.id}")
     print(f"[Discord] 已連接到 {len(bot.guilds)} 個伺服器")
 
@@ -49,31 +76,147 @@ async def on_message(message):
         print(f"[訊息] {message.author}: {message.content}")
     await bot.process_commands(message)
 
+# ======================
+#  上車系統指令
+# ======================
+@bot.command()
+async def 上車(ctx):
+    """加入排隊名單"""
+    user = ctx.author
+    if user in queue:
+        position = queue.index(user) + 1
+        await ctx.send(f"🚗 {user.display_name} 已在排隊中！（第 {position} 位）")
+        return
+
+    queue.append(user)
+    await ctx.send(f"✅ {user.display_name} 成功上車，目前第 **{len(queue)} 位**")
+
+@bot.command()
+async def 跳車(ctx):
+    """離開排隊名單"""
+    user = ctx.author
+    if user not in queue:
+        await ctx.send(f"❌ {user.display_name} 不在排隊名單中")
+        return
+
+    queue.remove(user)
+    await ctx.send(f"👋 {user.display_name} 已跳車。剩餘人數：{len(queue)}")
+
+@bot.command()
+async def 查清單(ctx):
+    """顯示目前排隊名單"""
+    if not queue:
+        await ctx.send("📭 目前沒有人排隊喔～")
+        return
+
+    msg = f"🚌 目前排隊共 {len(queue)} 人：\n"
+    for i, member in enumerate(queue, start=1):
+        role_type = get_role_type(member)
+        # 前4位標記為即將上場
+        mark = "🎮" if i <= MAX_PLAYERS else "🕓"
+        msg += f"{mark} {i}. {member.display_name}（{role_type}）\n"
+
+    await ctx.send(msg)
+
+@bot.command()
+async def 換人(ctx):
+    """執行換人邏輯：前2祖宗優先 + 後2位依排隊順序"""
+    if not has_authority(ctx.author):
+        await ctx.send("⛔ 只有慕笙寶寶、管理員或小幫手能使用這個指令！")
+        return
+
+    global queue
+    if not queue:
+        await ctx.send("⚠️ 目前沒有人排隊")
+        return
+
+    # 分離祖宗與圖奇
+    ancestors = [m for m in queue if get_role_type(m) == "祖宗"]
+
+    # 組出這一輪的上場名單
+    new_round = []
+
+    # 1. 優先取最多2位祖宗（依排隊順序）
+    for member in queue:
+        if len(new_round) < 2 and member in ancestors:
+            new_round.append(member)
+
+    # 2. 再依原排隊順序補滿4位（不論身份）
+    for member in queue:
+        if member not in new_round:
+            new_round.append(member)
+        if len(new_round) >= MAX_PLAYERS:
+            break
+
+    # 3. 移除前4位（已上場）
+    queue = queue[MAX_PLAYERS:] if len(queue) > MAX_PLAYERS else []
+
+    # 組出顯示訊息
+    msg = "🎮 **本輪上場：**\n"
+    for m in new_round:
+        role_type = get_role_type(m)
+        icon = "🔴" if role_type == "祖宗" else "⚪"
+        msg += f"{icon} {m.display_name}（{role_type}）\n"
+
+    if queue:
+        msg += "\n🕓 **下一輪候補：**\n"
+        msg += "、".join(m.display_name for m in queue)
+    else:
+        msg += "\n📭 所有人都已上場完畢"
+
+    await ctx.send(msg)
+
+@bot.command()
+async def 清除(ctx):
+    """清除所有排隊名單"""
+    if not has_authority(ctx.author):
+        await ctx.send("⛔ 只有慕笙寶寶、管理員或小幫手能清除名單")
+        return
+
+    global queue
+    queue.clear()
+    await ctx.send("🧹 已清除所有排隊名單")
+
+# ======================
+#  語音抽隊指令
+# ======================
 @bot.command()
 async def 抽(ctx):
+    """從語音頻道隨機分組"""
+    if not has_authority(ctx.author):
+        await ctx.send("⛔ 只有慕笙寶寶、管理員或小幫手能使用這個指令！")
+        return
+
     print(f"[指令] 收到抽獎指令，來自 {ctx.author}")
+
     if ctx.author.voice and ctx.author.voice.channel:
         vc = ctx.author.voice.channel
         members = [m.display_name for m in vc.members if not m.bot]
+
         if len(members) < 2:
-            await ctx.send("目前語音裡人太少。")
+            await ctx.send("⚠️ 語音裡人太少，無法分組")
             return
 
         random.shuffle(members)
-        half = len(members)//2
+        half = len(members) // 2
         red = members[:half]
         blue = members[half:]
         now = datetime.now().strftime("%Y/%m/%d %H:%M")
-        msg = (f"LOL 分組結果 ({now})\n"
-               f"紅隊: {', '.join(red)}\n"
-               f"藍隊: {', '.join(blue)}")
+
+        msg = (f"🔥 LOL 分組結果（{now}）\n"
+               f"🔴 紅隊：{', '.join(red)}\n"
+               f"🔵 藍隊：{', '.join(blue)}")
         await ctx.send(msg)
     else:
-        await ctx.send("請先進入語音頻道再使用 !抽 指令。")
+        await ctx.send("🎧 請先進入語音頻道再使用 !抽 指令")
 
+# ======================
+#  啟動程式
+# ======================
 if __name__ == "__main__":
+    print("[系統] 正在啟動 LOL 上車系統 Bot...")
+
     # 在背景啟動網頁伺服器
-    print("[系統] 正在啟動 LOL Discord Bot...")
     web_thread = Thread(target=run_web_server, daemon=True)
     web_thread.start()
 
