@@ -28,6 +28,7 @@ app = Flask(__name__)
 queue = []  # 排隊名單
 AUTHORIZED_ROLES = ["慕笙寶寶", "💟管理小幫手", "管理員", "小幫手"]
 MAX_PLAYERS = 4
+processed_messages = set()  # 防止重複處理
 
 # ======================
 #  輔助函數
@@ -94,8 +95,15 @@ async def on_message(message):
 @bot.command()
 async def 上車(ctx):
     """加入排隊名單"""
+    # 防止重複處理同一訊息
+    msg_id = ctx.message.id
+    if msg_id in processed_messages:
+        print(f"[警告] 重複訊息被忽略: {msg_id}")
+        return
+    processed_messages.add(msg_id)
+
     user = ctx.author
-    print(f"[指令-上車] {user.display_name} 執行上車指令")
+    print(f"[指令-上車] {user.display_name} 執行上車指令 (訊息ID: {msg_id})")
 
     if user in queue:
         position = queue.index(user) + 1
