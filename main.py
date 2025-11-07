@@ -112,6 +112,8 @@ async def 查清單(ctx):
     msg = f"🚌 目前排隊共 {len(queue)} 人：\n"
     for i, member in enumerate(queue, start=1):
         role_type = get_role_type(member)
+        # 除錯：印出該成員的所有身分組
+        print(f"[除錯] {member.display_name} 的身分組：{[role.name for role in member.roles]}")
         # 前4位標記為即將上場
         mark = "🎮" if i <= MAX_PLAYERS else "🕓"
         msg += f"{mark} {i}. {member.display_name}（{role_type}）\n"
@@ -176,6 +178,20 @@ async def 清除(ctx):
     global queue
     queue.clear()
     await ctx.send("🧹 已清除所有排隊名單")
+
+@bot.command()
+async def 查身分(ctx):
+    """查看自己的所有身分組（除錯用）"""
+    user = ctx.author
+    roles = [role.name for role in user.roles]
+    role_type = get_role_type(user)
+
+    msg = f"🔍 **{user.display_name} 的身分資訊：**\n"
+    msg += f"所有身分組：{', '.join(roles)}\n"
+    msg += f"判定結果：{role_type}"
+
+    await ctx.send(msg)
+    print(f"[除錯] {user.display_name} 的身分組列表：{roles}")
 
 # ======================
 #  語音抽隊指令
