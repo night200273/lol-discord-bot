@@ -26,9 +26,10 @@ app = Flask(__name__)
 #  全域變數
 # ======================
 queue = []  # 排隊名單
-AUTHORIZED_ROLES = ["慕笙寶寶", "💟管理小幫手", "管理員", "小幫手"]
+AUTHORIZED_ROLES = ["慕笙寶寶", "💟保姆", "保姆"]
 MAX_PLAYERS = 4
 processed_messages = set()  # 防止重複處理
+queue_enabled = False  # 上車系統開關（預設關閉）
 
 # ======================
 #  輔助函數
@@ -40,17 +41,17 @@ def has_authority(member):
         if role.name in AUTHORIZED_ROLES:
             return True
         # 模糊匹配：檢查是否包含關鍵字
-        if any(keyword in role.name for keyword in ["管理", "小幫手", "慕笙"]):
+        if any(keyword in role.name for keyword in ["管理", "保姆", "慕笙"]):
             return True
     return False
 
 def get_role_type(member):
-    """判斷身份組（祖宗 or 圖奇）"""
+    """判斷身份組（訂閱 or 觀眾）"""
     for role in member.roles:
-        # 檢查身分組名稱是否包含「祖宗」關鍵字
-        if "祖宗" in role.name:
-            return "祖宗"
-    return "圖奇"
+        # 檢查身分組名稱是否包含「訂閱」關鍵字
+        if "訂閱" in role.name:
+            return "訂閱"
+    return "觀眾"
 
 # ======================
 #  Flask 路由
@@ -93,8 +94,45 @@ async def on_message(message):
 #  上車系統指令
 # ======================
 @bot.command()
+async def 開始上車(ctx):
+    """開啟上車系統（僅慕笙寶寶或保姆可用）"""
+    if not has_authority(ctx.author):
+        await ctx.send("⛔ 只有慕笙寶寶或保姆能開啟上車系統！")
+        return
+
+    global queue_enabled
+    if queue_enabled:
+        await ctx.send("⚠️ 上車系統已經開啟了！")
+        return
+
+    queue_enabled = True
+    await ctx.send("🚀 上車系統已開啟！大家可以開始 !上車 囉～")
+    print(f"[系統] {ctx.author.display_name} 開啟了上車系統")
+
+@bot.command()
+async def 停止上車(ctx):
+    """關閉上車系統（僅慕笙寶寶或保姆可用）"""
+    if not has_authority(ctx.author):
+        await ctx.send("⛔ 只有慕笙寶寶或保姆能關閉上車系統！")
+        return
+
+    global queue_enabled
+    if not queue_enabled:
+        await ctx.send("⚠️ 上車系統已經是關閉狀態了！")
+        return
+
+    queue_enabled = False
+    await ctx.send("🛑 上車系統已關閉！暫時無法上車")
+    print(f"[系統] {ctx.author.display_name} 關閉了上車系統")
+
+@bot.command()
 async def 上車(ctx):
     """加入排隊名單"""
+    # 檢查上車系統是否開啟
+    if not queue_enabled:
+        await ctx.send("⛔ 上車系統尚未開啟，請等待慕笙寶寶或保姆開啟！")
+        return
+
     # 防止重複處理同一訊息
     msg_id = ctx.message.id
     if msg_id in processed_messages:
@@ -117,6 +155,11 @@ async def 上車(ctx):
 @bot.command()
 async def 跳車(ctx):
     """離開排隊名單"""
+    # 檢查上車系統是否開啟
+    if not queue_enabled:
+        await ctx.send("⛔ 上車系統尚未開啟！")
+        return
+
     user = ctx.author
     if user not in queue:
         await ctx.send(f"❌ {user.display_name} 不在排隊名單中")
@@ -128,6 +171,11 @@ async def 跳車(ctx):
 @bot.command()
 async def 查清單(ctx):
     """顯示目前排隊名單"""
+    # 檢查上車系統是否開啟
+    if not queue_enabled:
+        await ctx.send("⛔ 上車系統尚未開啟！")
+        return
+
     if not queue:
         await ctx.send("📭 目前沒有人排隊喔～")
         return
@@ -146,6 +194,11 @@ async def 查清單(ctx):
 @bot.command()
 async def 查看(ctx):
     """查看當前上場4人和預備候補4人"""
+    # 檢查上車系統是否開啟
+    if not queue_enabled:
+        await ctx.send("⛔ 上車系統尚未開啟！")
+        return
+
     if not queue:
         await ctx.send("📭 目前沒有人排隊喔～")
         return
@@ -159,7 +212,7 @@ async def 查看(ctx):
     if current_players:
         for i, member in enumerate(current_players, start=1):
             role_type = get_role_type(member)
-            icon = "🔴" if role_type == "祖宗" else "⚪"
+            icon = "🔴" if role_type == "訂閱" else "⚪"
             msg += f"{icon} {i}. {member.display_name}（{role_type}）\n"
     else:
         msg += "（無）\n"
@@ -173,7 +226,7 @@ async def 查看(ctx):
     else:
         msg += "（無）\n"
 
-    # 如果還有更多人在排隊
+    # 如果還有更多人在排隊中
     remaining = len(queue) - MAX_PLAYERS * 2
     if remaining > 0:
         msg += f"\n📋 還有 {remaining} 人在排隊中..."
@@ -182,13 +235,13 @@ async def 查看(ctx):
 
 @bot.command()
 async def 換人(ctx):
-    """執行換人邏輯：前2祖宗優先 + 後2位依排隊順序"""
+    """執行換人邏輯：前2訂閱優先 + 後2位依排隊順序"""
     # 除錯：印出使用者的身分組
     print(f"[除錯-換人] {ctx.author.display_name} 的身分組：{[role.name for role in ctx.author.roles]}")
     print(f"[除錯-換人] 權限檢查結果：{has_authority(ctx.author)}")
 
     if not has_authority(ctx.author):
-        await ctx.send("⛔ 只有慕笙寶寶、管理員或小幫手能使用這個指令！")
+        await ctx.send("⛔ 只有慕笙寶寶、管理員或保姆能使用這個指令！")
         return
 
     global queue
@@ -196,15 +249,15 @@ async def 換人(ctx):
         await ctx.send("⚠️ 目前沒有人排隊")
         return
 
-    # 分離祖宗與圖奇/主播
-    ancestors = [m for m in queue if get_role_type(m) == "祖宗"]
+    # 分離訂閱與觀眾
+    subscribers = [m for m in queue if get_role_type(m) == "訂閱"]
 
     # 組出這一輪的上場名單
     new_round = []
 
-    # 1. 優先取最多2位祖宗（依排隊順序）
+    # 1. 優先取最多2位訂閱（依排隊順序）
     for member in queue:
-        if len(new_round) < 2 and member in ancestors:
+        if len(new_round) < 2 and member in subscribers:
             new_round.append(member)
 
     # 2. 再依原排隊順序補滿4位（不論身份）
@@ -222,7 +275,7 @@ async def 換人(ctx):
     for m in new_round:
         role_type = get_role_type(m)
         # 根據不同身分顯示不同圖示
-        if role_type == "祖宗":
+        if role_type == "訂閱":
             icon = "🔴"
         else:
             icon = "⚪"
@@ -240,7 +293,7 @@ async def 換人(ctx):
 async def 清除(ctx):
     """清除所有排隊名單"""
     if not has_authority(ctx.author):
-        await ctx.send("⛔ 只有慕笙寶寶、管理員或小幫手能清除名單")
+        await ctx.send("⛔ 只有慕笙寶寶、管理員或保姆能清除名單")
         return
 
     global queue
@@ -268,7 +321,7 @@ async def 查身分(ctx):
 async def 抽(ctx):
     """從語音頻道隨機分組"""
     if not has_authority(ctx.author):
-        await ctx.send("⛔ 只有慕笙寶寶、管理員或小幫手能使用這個指令！")
+        await ctx.send("⛔ 只有慕笙寶寶、管理員或保姆能使用這個指令！")
         return
 
     print(f"[指令] 收到抽獎指令，來自 {ctx.author}")
