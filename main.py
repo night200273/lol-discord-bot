@@ -395,10 +395,33 @@ if __name__ == "__main__":
     import time
     time.sleep(2)  # 等待 Flask 啟動
 
-    # 啟動 Discord Bot
+    # 啟動 Discord Bot（帶重試機制）
     print("[Discord] 正在連接到 Discord Gateway...")
     token = os.getenv("DISCORD_TOKEN")
     if not token:
         print("[錯誤] 找不到 DISCORD_TOKEN 環境變數！")
     else:
-        bot.run(token)
+        max_retries = 5
+        retry_delay = 60  # 等待 60 秒後重試
+
+        for attempt in range(max_retries):
+            try:
+                print(f"[Discord] 嘗試連接 (第 {attempt + 1}/{max_retries} 次)...")
+                bot.run(token)
+                break  # 如果成功連接，跳出循環
+            except discord.errors.HTTPException as e:
+                if "429" in str(e) or "rate limit" in str(e).lower():
+                    print(f"[警告] 遇到 Rate Limit 錯誤！")
+                    if attempt < max_retries - 1:
+                        print(f"[系統] 等待 {retry_delay} 秒後重試...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # 指數退避：每次等待時間加倍
+                    else:
+                        print("[錯誤] 已達到最大重試次數，放棄連接")
+                        raise
+                else:
+                    print(f"[錯誤] Discord HTTP 錯誤：{e}")
+                    raise
+            except Exception as e:
+                print(f"[錯誤] 啟動 Bot 時發生錯誤：{e}")
+                raise
