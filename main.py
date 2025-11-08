@@ -30,6 +30,7 @@ AUTHORIZED_ROLES = ["慕笙寶寶", "💟保姆", "保姆"]
 MAX_PLAYERS = 4
 processed_messages = set()  # 防止重複處理
 queue_enabled = False  # 上車系統開關（預設關閉）
+ALLOWED_CHANNEL_ID = 1435699524084699247  # 指定頻道ID
 
 # ======================
 #  輔助函數
@@ -52,6 +53,10 @@ def get_role_type(member):
         if "訂閱" in role.name:
             return "訂閱"
     return "觀眾"
+
+def is_allowed_channel(ctx):
+    """檢查是否在允許的頻道中"""
+    return ctx.channel.id == ALLOWED_CHANNEL_ID
 
 # ======================
 #  Flask 路由
@@ -96,6 +101,9 @@ async def on_message(message):
 @bot.command()
 async def 開始上車(ctx):
     """開啟上車系統（僅慕笙寶寶或保姆可用）"""
+    if not is_allowed_channel(ctx):
+        return
+
     if not has_authority(ctx.author):
         await ctx.send("⛔ 只有慕笙寶寶或保姆能開啟上車系統！")
         return
@@ -112,6 +120,9 @@ async def 開始上車(ctx):
 @bot.command()
 async def 停止上車(ctx):
     """關閉上車系統（僅慕笙寶寶或保姆可用）"""
+    if not is_allowed_channel(ctx):
+        return
+
     if not has_authority(ctx.author):
         await ctx.send("⛔ 只有慕笙寶寶或保姆能關閉上車系統！")
         return
@@ -128,6 +139,9 @@ async def 停止上車(ctx):
 @bot.command()
 async def 上車(ctx):
     """加入排隊名單"""
+    if not is_allowed_channel(ctx):
+        return
+
     # 檢查上車系統是否開啟
     if not queue_enabled:
         await ctx.send("⛔ 上車系統尚未開啟，請等待慕笙寶寶或保姆開啟！")
@@ -155,6 +169,9 @@ async def 上車(ctx):
 @bot.command()
 async def 跳車(ctx):
     """離開排隊名單"""
+    if not is_allowed_channel(ctx):
+        return
+
     # 檢查上車系統是否開啟
     if not queue_enabled:
         await ctx.send("⛔ 上車系統尚未開啟！")
@@ -168,9 +185,12 @@ async def 跳車(ctx):
     queue.remove(user)
     await ctx.send(f"👋 {user.display_name} 已跳車。剩餘人數：{len(queue)}")
 
-@bot.command()
-async def 查清單(ctx):
+@bot.command(name="排隊清單")
+async def 排隊清單(ctx):
     """顯示目前排隊名單"""
+    if not is_allowed_channel(ctx):
+        return
+
     # 檢查上車系統是否開啟
     if not queue_enabled:
         await ctx.send("⛔ 上車系統尚未開啟！")
@@ -191,9 +211,12 @@ async def 查清單(ctx):
 
     await ctx.send(msg)
 
-@bot.command()
-async def 查看(ctx):
+@bot.command(name="查車況")
+async def 查車況(ctx):
     """查看當前上場4人和預備候補4人"""
+    if not is_allowed_channel(ctx):
+        return
+
     # 檢查上車系統是否開啟
     if not queue_enabled:
         await ctx.send("⛔ 上車系統尚未開啟！")
@@ -233,9 +256,12 @@ async def 查看(ctx):
 
     await ctx.send(msg)
 
-@bot.command()
+@bot.command(name="換人")
 async def 換人(ctx):
     """執行換人邏輯：前2訂閱優先 + 後2位依排隊順序"""
+    if not is_allowed_channel(ctx):
+        return
+
     # 除錯：印出使用者的身分組
     print(f"[除錯-換人] {ctx.author.display_name} 的身分組：{[role.name for role in ctx.author.roles]}")
     print(f"[除錯-換人] 權限檢查結果：{has_authority(ctx.author)}")
@@ -289,9 +315,12 @@ async def 換人(ctx):
 
     await ctx.send(msg)
 
-@bot.command()
+@bot.command(name="清除")
 async def 清除(ctx):
     """清除所有排隊名單"""
+    if not is_allowed_channel(ctx):
+        return
+
     if not has_authority(ctx.author):
         await ctx.send("⛔ 只有慕笙寶寶、管理員或保姆能清除名單")
         return
@@ -300,9 +329,12 @@ async def 清除(ctx):
     queue.clear()
     await ctx.send("🧹 已清除所有排隊名單")
 
-@bot.command()
-async def 查身分(ctx):
+@bot.command(name="查身份")
+async def 查身份(ctx):
     """查看自己的所有身分組（除錯用）"""
+    if not is_allowed_channel(ctx):
+        return
+
     user = ctx.author
     roles = [role.name for role in user.roles]
     role_type = get_role_type(user)
@@ -317,9 +349,12 @@ async def 查身分(ctx):
 # ======================
 #  語音抽隊指令
 # ======================
-@bot.command()
+@bot.command(name="抽")
 async def 抽(ctx):
     """從語音頻道隨機分組"""
+    if not is_allowed_channel(ctx):
+        return
+
     if not has_authority(ctx.author):
         await ctx.send("⛔ 只有慕笙寶寶、管理員或保姆能使用這個指令！")
         return
