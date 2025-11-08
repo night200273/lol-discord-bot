@@ -6,6 +6,17 @@ import os
 from threading import Thread
 from flask import Flask
 import logging
+from pathlib import Path
+
+# 載入 .env 文件（如果存在）
+env_file = Path(__file__).parent / '.env'
+if env_file.exists():
+    with open(env_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ[key.strip()] = value.strip()
 
 # 關閉 Flask 的日誌輸出
 log = logging.getLogger('werkzeug')
