@@ -113,7 +113,7 @@ class TwitchBot(twitch_commands.Bot):
 
     async def event_ready(self):
         """Twitch 連線成功"""
-        print(f"[Twitch] ✅ 已登入為 {self.nick}")
+        print(f"[Twitch] [OK] 已登入為 {self.nick}")
         print(f"[Twitch] 已連線至頻道：{os.getenv('TWITCH_CHANNEL', 'm0623lalala')}")
 
     async def event_message(self, message):
@@ -301,19 +301,25 @@ async def run_twitch_bot():
         print(f"[Twitch] CHANNEL: {twitch_channel}")
 
         if not twitch_username or not twitch_token:
-            print("[Twitch] ⚠️  缺少 TWITCH_USERNAME 或 TWITCH_TOKEN，Twitch 監聽已禁用")
+            print("[Twitch] [WARNING] 缺少 TWITCH_USERNAME 或 TWITCH_TOKEN，Twitch 監聽已禁用")
             return
 
         if not twitch_client_id:
-            print("[Twitch] ⚠️  缺少 TWITCH_CLIENT_ID，Twitch 監聽已禁用")
+            print("[Twitch] [WARNING] 缺少 TWITCH_CLIENT_ID，Twitch 監聽已禁用")
             return
 
         print("[Twitch] 建立 TwitchBot 實例...")
+        # 注意：如果 client_secret 無效，twitchio 會報錯
+        # 需要確保 CLIENT_ID 和 CLIENT_SECRET 是一對匹配的有效認證
+        if not twitch_client_secret or twitch_client_secret == "not_used":
+            print("[Twitch] [WARNING] 缺少有效的 TWITCH_CLIENT_SECRET，Twitch 監聽已禁用")
+            print("[Twitch] [INFO] 提示：CLIENT_SECRET 必須是有效的 Twitch OAuth 密鑰")
+            return
+
         twitch_bot = TwitchBot(
             token=twitch_token,
             client_id=twitch_client_id,
-            client_secret=twitch_client_secret or "not_used",  # 監聽模式不需要
-            bot_id=os.getenv("TWITCH_BOT_ID", "999999999"),  # 監聽模式用默認值
+            client_secret=twitch_client_secret,
             nick=twitch_username,
             prefix="!",
             initial_channels=[twitch_channel]
@@ -326,7 +332,7 @@ async def run_twitch_bot():
         await twitch_bot.start()
 
     except Exception as e:
-        print(f"[Twitch] ❌ 連接失敗：{e}")
+        print(f"[Twitch] [ERROR] 連接失敗：{e}")
         import traceback
         traceback.print_exc()
 
@@ -374,13 +380,14 @@ def run_web_server():
 # ======================
 @bot.event
 async def on_ready():
-    print(f"[Discord] ✅ Bot 登入成功: {bot.user}")
+    print(f"[Discord] [OK] Bot 登入成功: {bot.user}")
     print(f"[Discord] Bot ID: {bot.user.id}")
     print(f"[Discord] 已連接到 {len(bot.guilds)} 個伺服器")
 
     # 列出所有伺服器
     for guild in bot.guilds:
-        print(f"[Discord] - 伺服器：{guild.name} (ID: {guild.id})")
+        safe_name = guild.name.encode('cp950', errors='ignore').decode('cp950')
+        print(f"[Discord] - Server: {safe_name} (ID: {guild.id})")
 
 @bot.event
 async def on_message(message):
