@@ -333,7 +333,9 @@ async def run_twitch_bot():
         twitch_bot.discord_bot = bot
 
         print("[Twitch] 正在連接到 Twitch...")
-        await twitch_bot.start()
+        # 對於公開應用，使用 load_tokens=False 來跳過 client_credentials 認證流程
+        # 只需要 OAuth token 就可以監聽 chat
+        await twitch_bot.start(load_tokens=False)
 
     except Exception as e:
         print(f"[Twitch] [ERROR] 連接失敗：{e}")
