@@ -310,14 +310,19 @@ async def run_twitch_bot():
             return
 
         print("[Twitch] 建立 TwitchBot 實例...")
-        # 注意：應用類型為「公開」時，不需要 CLIENT_SECRET
-        # 如果應用類型為「機密」，則需要 CLIENT_SECRET
+        # 注意：twitchio 需要 client_secret 參數，即使是公開應用也需要提供（可以是空值或任意值）
+        # 使用環境變數中的 CLIENT_SECRET，如果沒有則使用空值
 
-        print("[Twitch] [INFO] 使用公開應用模式（無需 CLIENT_SECRET）")
+        if not twitch_client_secret:
+            twitch_client_secret = "public_app_secret"
+            print("[Twitch] [INFO] 使用公開應用模式，設置預設 client_secret")
+        else:
+            print("[Twitch] [INFO] 使用 CLIENT_SECRET 進行初始化")
 
         twitch_bot = TwitchBot(
             token=twitch_token,
             client_id=twitch_client_id,
+            client_secret=twitch_client_secret,
             nick=twitch_username,
             prefix="!",
             initial_channels=[twitch_channel],
