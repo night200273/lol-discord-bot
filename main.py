@@ -323,7 +323,7 @@ async def run_twitch_bot():
         twitch_bot.discord_bot = bot
 
         print("[Twitch] 正在連接到 Twitch...")
-        await twitch_bot.connect()
+        await twitch_bot.start()
 
     except Exception as e:
         print(f"[Twitch] ❌ 連接失敗：{e}")
