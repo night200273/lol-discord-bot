@@ -326,7 +326,7 @@ async def run_twitch_bot():
             nick=twitch_username,
             prefix="!",
             initial_channels=[twitch_channel],
-            bot_id="ebi0wydpise29mt1sy24wc467vu9pr"
+            bot_id="xm1hr2qkhidziyahjerkkzvckb0244"
         )
 
         # 將 Discord Bot 的引用傳遞給 Twitch Bot
