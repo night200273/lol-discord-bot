@@ -322,7 +322,6 @@ async def run_twitch_bot():
         twitch_bot = TwitchBot(
             token=twitch_token,
             client_id=twitch_client_id,
-            client_secret=twitch_client_secret,
             nick=twitch_username,
             prefix="!",
             initial_channels=[twitch_channel],
