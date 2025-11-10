@@ -298,6 +298,7 @@ async def run_twitch_bot():
         print(f"[Twitch] USERNAME: {twitch_username}")
         print(f"[Twitch] TOKEN: {twitch_token[:20] if twitch_token else 'None'}...")
         print(f"[Twitch] CLIENT_ID: {twitch_client_id[:20] if twitch_client_id else 'None'}...")
+        print(f"[Twitch] CLIENT_SECRET: {'<SET>' if twitch_client_secret else '<NOT SET>'}...")
         print(f"[Twitch] CHANNEL: {twitch_channel}")
 
         if not twitch_username or not twitch_token:
