@@ -293,6 +293,7 @@ async def run_twitch_bot():
         twitch_token = os.getenv("TWITCH_TOKEN")
         twitch_channel = os.getenv("TWITCH_CHANNEL", "m0623lalala")
         twitch_client_id = os.getenv("TWITCH_CLIENT_ID")
+        twitch_client_secret = os.getenv("TWITCH_CLIENT_SECRET")
 
         print(f"[Twitch] USERNAME: {twitch_username}")
         print(f"[Twitch] TOKEN: {twitch_token[:20] if twitch_token else 'None'}...")
@@ -311,6 +312,8 @@ async def run_twitch_bot():
         twitch_bot = TwitchBot(
             token=twitch_token,
             client_id=twitch_client_id,
+            client_secret=twitch_client_secret or "not_used",  # 監聽模式不需要
+            bot_id=os.getenv("TWITCH_BOT_ID", "999999999"),  # 監聽模式用默認值
             nick=twitch_username,
             prefix="!",
             initial_channels=[twitch_channel]
