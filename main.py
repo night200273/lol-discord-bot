@@ -310,17 +310,14 @@ async def run_twitch_bot():
             return
 
         print("[Twitch] 建立 TwitchBot 實例...")
-        # 注意：如果 client_secret 無效，twitchio 會報錯
-        # 需要確保 CLIENT_ID 和 CLIENT_SECRET 是一對匹配的有效認證
-        if not twitch_client_secret or twitch_client_secret == "not_used":
-            print("[Twitch] [WARNING] 缺少有效的 TWITCH_CLIENT_SECRET，Twitch 監聽已禁用")
-            print("[Twitch] [INFO] 提示：CLIENT_SECRET 必須是有效的 Twitch OAuth 密鑰")
-            return
+        # 注意：應用類型為「公開」時，不需要 CLIENT_SECRET
+        # 如果應用類型為「機密」，則需要 CLIENT_SECRET
+
+        print("[Twitch] [INFO] 使用公開應用模式（無需 CLIENT_SECRET）")
 
         twitch_bot = TwitchBot(
             token=twitch_token,
             client_id=twitch_client_id,
-            client_secret=twitch_client_secret,
             nick=twitch_username,
             prefix="!",
             initial_channels=[twitch_channel],
