@@ -7,6 +7,9 @@ from threading import Thread
 from flask import Flask
 import logging
 from pathlib import Path
+import asyncio
+import twitchio
+from twitchio.ext import commands as twitch_commands
 
 # 載入 .env 文件（如果存在）
 env_file = Path(__file__).parent / '.env'
@@ -42,6 +45,8 @@ MAX_PLAYERS = 4
 processed_messages = set()  # 防止重複處理
 queue_enabled = False  # 上車系統開關（預設關閉）
 ALLOWED_CHANNEL_ID = 1435699524084699247  # 指定頻道ID
+twitch_processed_users = set()  # 防止 Twitch 重複處理
+twitch_bot = None  # Twitch Bot 全域變數
 
 # ======================
 #  輔助函數
@@ -59,6 +64,16 @@ def has_authority(member):
 
 def get_role_type(member):
     """判斷身份組（訂閱 or 觀眾）"""
+    # 檢查是否為 Twitch 使用者
+    if isinstance(member, TwitchBot.TwitchUser):
+        if member.is_subscriber:
+            return "Twitch 訂閱者"
+        elif member.is_follower:
+            return "Twitch 追隨者"
+        else:
+            return "Twitch 觀眾"
+
+    # 檢查 Discord 身分組
     for role in member.roles:
         # 檢查身分組名稱是否包含「訂閱」關鍵字
         if "訂閱" in role.name:
@@ -68,6 +83,271 @@ def get_role_type(member):
 def is_allowed_channel(ctx):
     """檢查是否在允許的頻道中"""
     return ctx.channel.id == ALLOWED_CHANNEL_ID
+
+# ======================
+#  Twitch Bot 設定
+# ======================
+class TwitchBot(twitch_commands.Bot):
+    """Twitch 聊天監聽 Bot"""
+
+    class TwitchUser:
+        """Twitch 觀眾虛擬使用者類別"""
+        def __init__(self, name, is_subscriber=False, is_follower=False):
+            self.display_name = f"[Twitch] {name}"
+            self.name = name
+            self.roles = []
+            self.is_subscriber = is_subscriber  # 是否為訂閱者
+            self.is_follower = is_follower      # 是否為追隨者
+
+        def __eq__(self, other):
+            if isinstance(other, TwitchBot.TwitchUser):
+                return self.name == other.name
+            return False
+
+        def __hash__(self):
+            return hash(f"twitch_{self.name}")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.discord_bot = None  # 儲存 Discord Bot 的引用
+
+    async def event_ready(self):
+        """Twitch 連線成功"""
+        print(f"[Twitch] ✅ 已登入為 {self.nick}")
+        print(f"[Twitch] 已連線至頻道：{os.getenv('TWITCH_CHANNEL', 'm0623lalala')}")
+
+    async def event_message(self, message):
+        """監聽 Twitch 聊天訊息"""
+        # 忽略機器人本身的訊息
+        if message.echo:
+            return
+
+        command = message.content.strip()
+        user_name = message.author.name
+
+        # 處理 !上車 指令
+        if command == "!上車":
+            print(f"[Twitch] 收到來自 {user_name} 的 !上車 指令")
+
+            # 防止重複處理同一使用者
+            if user_name in twitch_processed_users:
+                print(f"[Twitch] 警告：{user_name} 已在處理中，忽略重複請求")
+                return
+
+            # 標記為已處理（30秒內不會再處理同一使用者）
+            twitch_processed_users.add(user_name)
+
+            # 延遲 30 秒移除使用者，允許下次請求
+            async def remove_after_delay():
+                await asyncio.sleep(30)
+                twitch_processed_users.discard(user_name)
+
+            asyncio.create_task(remove_after_delay())
+
+            # 觸發 Discord 相關邏輯
+            if self.discord_bot:
+                await self.handle_twitch_ride(user_name, message)
+
+        # 處理 !跳車 指令
+        elif command == "!跳車":
+            print(f"[Twitch] 收到來自 {user_name} 的 !跳車 指令")
+
+            # 防止重複處理同一使用者
+            if user_name in twitch_processed_users:
+                print(f"[Twitch] 警告：{user_name} 已在處理中，忽略重複請求")
+                return
+
+            # 標記為已處理
+            twitch_processed_users.add(user_name)
+
+            # 延遲 30 秒移除使用者
+            async def remove_after_delay():
+                await asyncio.sleep(30)
+                twitch_processed_users.discard(user_name)
+
+            asyncio.create_task(remove_after_delay())
+
+            # 觸發 Discord 相關邏輯
+            if self.discord_bot:
+                await self.handle_twitch_leave(user_name)
+
+    async def handle_twitch_ride(self, user_name, message):
+        """處理 Twitch 觀眾的上車請求"""
+        global queue_enabled
+
+        # 檢查上車系統是否開啟
+        if not queue_enabled:
+            print(f"[Twitch] 上車系統未開啟，忽略 {user_name} 的請求")
+            return
+
+        try:
+            # 取得 Discord 頻道
+            channel = self.discord_bot.get_channel(ALLOWED_CHANNEL_ID)
+            if not channel:
+                print(f"[Twitch] 錯誤：無法找到 Discord 頻道 {ALLOWED_CHANNEL_ID}")
+                return
+
+            # 獲取使用者身份信息
+            is_subscriber = message.author.is_subscriber if hasattr(message.author, 'is_subscriber') else False
+            is_follower = message.author.is_follower if hasattr(message.author, 'is_follower') else False
+
+            # 建立一個虛擬的使用者物件以加入隊伍
+            twitch_user = self.TwitchUser(user_name, is_subscriber=is_subscriber, is_follower=is_follower)
+
+            # 檢查是否已在隊伍中
+            if any(u.name == user_name if isinstance(u, self.TwitchUser) else False for u in queue):
+                position = next((i + 1 for i, u in enumerate(queue) if isinstance(u, self.TwitchUser) and u.name == user_name), None)
+                if position:
+                    msg = f"🚗 Twitch 觀眾 **{user_name}** 已在排隊中！（第 {position} 位）"
+                    # 使用 asyncio.run_coroutine_threadsafe 跨執行緒執行
+                    asyncio.run_coroutine_threadsafe(
+                        channel.send(msg),
+                        self.discord_bot.loop
+                    )
+                    print(f"[Twitch] {user_name} 已在隊伍中（第 {position} 位）")
+                return
+
+            # 加入隊伍
+            queue.append(twitch_user)
+            position = len(queue)
+
+            # 在 Discord 發送公告訊息
+            announcement = f"🎮 Twitch 觀眾 **{user_name}** 從台上打了 !上車！"
+            asyncio.run_coroutine_threadsafe(
+                channel.send(announcement),
+                self.discord_bot.loop
+            )
+            print(f"[Twitch] 已在 Discord 發送公告：{announcement}")
+
+            # 根據身份生成不同的歡迎訊息
+            status_icon = ""
+            if is_subscriber:
+                status_icon = "💝 (訂閱者)"
+            elif is_follower:
+                status_icon = "⭐ (追隨者)"
+
+            msg = f"✅ Twitch 觀眾 **{user_name}** {status_icon} 成功上車，目前第 **{position} 位**"
+            asyncio.run_coroutine_threadsafe(
+                channel.send(msg),
+                self.discord_bot.loop
+            )
+            print(f"[Twitch] {user_name} (訂閱:{is_subscriber}, 追隨:{is_follower}) 成功加入隊伍，目前第 {position} 位")
+
+        except Exception as e:
+            print(f"[Twitch] 錯誤：處理上車請求時失敗 - {e}")
+            import traceback
+            traceback.print_exc()
+
+    async def handle_twitch_leave(self, user_name):
+        """處理 Twitch 觀眾的跳車請求"""
+        global queue_enabled
+
+        # 檢查上車系統是否開啟
+        if not queue_enabled:
+            print(f"[Twitch] 上車系統未開啟，忽略 {user_name} 的跳車請求")
+            return
+
+        try:
+            # 取得 Discord 頻道
+            channel = self.discord_bot.get_channel(ALLOWED_CHANNEL_ID)
+            if not channel:
+                print(f"[Twitch] 錯誤：無法找到 Discord 頻道 {ALLOWED_CHANNEL_ID}")
+                return
+
+            # 從隊伍中尋找 Twitch 觀眾
+            twitch_user_to_remove = None
+            for u in queue:
+                if isinstance(u, self.TwitchUser) and u.name == user_name:
+                    twitch_user_to_remove = u
+                    break
+
+            if not twitch_user_to_remove:
+                msg = f"❌ Twitch 觀眾 **{user_name}** 不在排隊名單中"
+                asyncio.run_coroutine_threadsafe(
+                    channel.send(msg),
+                    self.discord_bot.loop
+                )
+                print(f"[Twitch] {user_name} 不在隊伍中")
+                return
+
+            # 從隊伍移除
+            queue.remove(twitch_user_to_remove)
+            msg = f"👋 Twitch 觀眾 **{user_name}** 已跳車。剩餘人數：{len(queue)}"
+            asyncio.run_coroutine_threadsafe(
+                channel.send(msg),
+                self.discord_bot.loop
+            )
+            print(f"[Twitch] {user_name} 成功跳車，剩餘人數：{len(queue)}")
+
+        except Exception as e:
+            print(f"[Twitch] 錯誤：處理跳車請求時失敗 - {e}")
+            import traceback
+            traceback.print_exc()
+
+async def run_twitch_bot():
+    """在背景執行 Twitch Bot"""
+    global twitch_bot
+    try:
+        print("[Twitch] 讀取環境變數...")
+        twitch_username = os.getenv("TWITCH_USERNAME")
+        twitch_token = os.getenv("TWITCH_TOKEN")
+        twitch_channel = os.getenv("TWITCH_CHANNEL", "m0623lalala")
+        twitch_client_id = os.getenv("TWITCH_CLIENT_ID")
+
+        print(f"[Twitch] USERNAME: {twitch_username}")
+        print(f"[Twitch] TOKEN: {twitch_token[:20] if twitch_token else 'None'}...")
+        print(f"[Twitch] CLIENT_ID: {twitch_client_id[:20] if twitch_client_id else 'None'}...")
+        print(f"[Twitch] CHANNEL: {twitch_channel}")
+
+        if not twitch_username or not twitch_token:
+            print("[Twitch] ⚠️  缺少 TWITCH_USERNAME 或 TWITCH_TOKEN，Twitch 監聽已禁用")
+            return
+
+        if not twitch_client_id:
+            print("[Twitch] ⚠️  缺少 TWITCH_CLIENT_ID，Twitch 監聽已禁用")
+            return
+
+        print("[Twitch] 建立 TwitchBot 實例...")
+        twitch_bot = TwitchBot(
+            token=twitch_token,
+            client_id=twitch_client_id,
+            nick=twitch_username,
+            prefix="!",
+            initial_channels=[twitch_channel]
+        )
+
+        # 將 Discord Bot 的引用傳遞給 Twitch Bot
+        twitch_bot.discord_bot = bot
+
+        print("[Twitch] 正在連接到 Twitch...")
+        await twitch_bot.connect()
+
+    except Exception as e:
+        print(f"[Twitch] ❌ 連接失敗：{e}")
+        import traceback
+        traceback.print_exc()
+
+def run_twitch_in_thread():
+    """在獨立執行緒中執行 Twitch Bot"""
+    print("[Twitch] 正在初始化 Twitch Bot 執行緒...")
+    try:
+        # 為了避免事件循環衝突，強制建立新的事件循環
+        import sys
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        print("[Twitch] 執行緒已建立，正在連接...")
+        loop.run_until_complete(run_twitch_bot())
+        print("[Twitch] 執行緒運行中...")
+        loop.run_forever()
+    except KeyboardInterrupt:
+        print("[Twitch] 執行緒被中斷")
+    except Exception as e:
+        print(f"[Twitch] 執行緒錯誤：{e}")
+        import traceback
+        traceback.print_exc()
 
 # ======================
 #  Flask 路由
@@ -214,11 +494,25 @@ async def 排隊清單(ctx):
     msg = f"🚌 目前排隊共 {len(queue)} 人：\n"
     for i, member in enumerate(queue, start=1):
         role_type = get_role_type(member)
-        # 除錯：印出該成員的所有身分組
-        print(f"[除錯] {member.display_name} 的身分組：{[role.name for role in member.roles]}")
+
+        # 根據身分設定圖示
+        if isinstance(member, TwitchBot.TwitchUser):
+            if member.is_subscriber:
+                icon = "💝"  # Twitch 訂閱者
+            elif member.is_follower:
+                icon = "⭐"  # Twitch 追隨者
+            else:
+                icon = "🟦"  # Twitch 普通觀眾
+        else:
+            # Discord 使用者
+            if role_type == "訂閱":
+                icon = "🔴"  # Discord 訂閱者
+            else:
+                icon = "⚪"  # Discord 普通觀眾
+
         # 前4位標記為即將上場
         mark = "🎮" if i <= MAX_PLAYERS else "🕓"
-        msg += f"{mark} {i}. {member.display_name}（{role_type}）\n"
+        msg += f"{mark}{icon} {i}. {member.display_name}（{role_type}）\n"
 
     await ctx.send(msg)
 
@@ -246,7 +540,19 @@ async def 查車況(ctx):
     if current_players:
         for i, member in enumerate(current_players, start=1):
             role_type = get_role_type(member)
-            icon = "🔴" if role_type == "訂閱" else "⚪"
+
+            # 根據身分設定圖示
+            if isinstance(member, TwitchBot.TwitchUser):
+                if member.is_subscriber:
+                    icon = "💝"  # Twitch 訂閱者
+                elif member.is_follower:
+                    icon = "⭐"  # Twitch 追隨者
+                else:
+                    icon = "🟦"  # Twitch 普通觀眾
+            else:
+                # Discord 使用者
+                icon = "🔴" if role_type == "訂閱" else "⚪"
+
             msg += f"{icon} {i}. {member.display_name}（{role_type}）\n"
     else:
         msg += "（無）\n"
@@ -255,7 +561,18 @@ async def 查車況(ctx):
     if next_players:
         for i, member in enumerate(next_players, start=5):
             role_type = get_role_type(member)
-            icon = "⚪"
+
+            # 根據身分設定圖示
+            if isinstance(member, TwitchBot.TwitchUser):
+                if member.is_subscriber:
+                    icon = "💝"  # Twitch 訂閱者
+                elif member.is_follower:
+                    icon = "⭐"  # Twitch 追隨者
+                else:
+                    icon = "🟦"  # Twitch 普通觀眾
+            else:
+                icon = "⚪"
+
             msg += f"{icon} {i}. {member.display_name}（{role_type}）\n"
     else:
         msg += "（無）\n"
@@ -403,8 +720,12 @@ if __name__ == "__main__":
     web_thread = Thread(target=run_web_server, daemon=True)
     web_thread.start()
 
+    # 在背景啟動 Twitch Bot
+    twitch_thread = Thread(target=run_twitch_in_thread, daemon=True)
+    twitch_thread.start()
+
     import time
-    time.sleep(2)  # 等待 Flask 啟動
+    time.sleep(2)  # 等待 Flask 和 Twitch 啟動
 
     # 啟動 Discord Bot（帶重試機制）
     print("[Discord] 正在連接到 Discord Gateway...")
