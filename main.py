@@ -505,14 +505,10 @@ async def 排隊清單(ctx):
     for i, member in enumerate(queue, start=1):
         role_type = get_role_type(member)
 
-        # 根據身分設定圖示
+        # 根據身分設定圖示（Twitch 和 Discord 使用相同圖示）
         if isinstance(member, TwitchBot.TwitchUser):
-            if member.is_subscriber:
-                icon = "💝"  # Twitch 訂閱者
-            elif member.is_follower:
-                icon = "⭐"  # Twitch 追隨者
-            else:
-                icon = "🟦"  # Twitch 普通觀眾
+            # Twitch 訂閱者使用紅圈，Twitch 普通觀眾使用白圈
+            icon = "🔴" if member.is_subscriber else "⚪"
         else:
             # Discord 使用者
             if role_type == "訂閱":
@@ -551,14 +547,10 @@ async def 查車況(ctx):
         for i, member in enumerate(current_players, start=1):
             role_type = get_role_type(member)
 
-            # 根據身分設定圖示
+            # 根據身分設定圖示（Twitch 和 Discord 使用相同圖示）
             if isinstance(member, TwitchBot.TwitchUser):
-                if member.is_subscriber:
-                    icon = "💝"  # Twitch 訂閱者
-                elif member.is_follower:
-                    icon = "⭐"  # Twitch 追隨者
-                else:
-                    icon = "🟦"  # Twitch 普通觀眾
+                # Twitch 訂閱者使用紅圈，Twitch 普通觀眾使用白圈
+                icon = "🔴" if member.is_subscriber else "⚪"
             else:
                 # Discord 使用者
                 icon = "🔴" if role_type == "訂閱" else "⚪"
@@ -572,14 +564,10 @@ async def 查車況(ctx):
         for i, member in enumerate(next_players, start=5):
             role_type = get_role_type(member)
 
-            # 根據身分設定圖示
+            # 根據身分設定圖示（Twitch 和 Discord 使用相同圖示）
             if isinstance(member, TwitchBot.TwitchUser):
-                if member.is_subscriber:
-                    icon = "💝"  # Twitch 訂閱者
-                elif member.is_follower:
-                    icon = "⭐"  # Twitch 追隨者
-                else:
-                    icon = "🟦"  # Twitch 普通觀眾
+                # Twitch 訂閱者使用紅圈，Twitch 普通觀眾使用白圈
+                icon = "🔴" if member.is_subscriber else "⚪"
             else:
                 icon = "⚪"
 
