@@ -395,9 +395,12 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # 印出所有訊息（除錯用）
+    # 只列印包含關鍵字的訊息
     if message.author != bot.user:
-        print(f"[訊息] {message.author}: {message.content}")
+        # 關鍵字列表
+        keywords = ["!開始上車", "!停止上車", "!上車", "!跳車", "!排隊", "!查車況"]
+        if any(keyword in message.content for keyword in keywords):
+            print(f"[訊息] {message.author}: {message.content}")
     await bot.process_commands(message)
 
 # ======================
