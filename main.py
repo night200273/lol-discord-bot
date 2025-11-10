@@ -207,9 +207,20 @@ class TwitchBot(twitch_commands.Bot):
                     print(f"[Twitch] {user_name} 已在隊伍中（第 {position} 位）")
                 return
 
-            # 加入隊伍
-            queue.append(twitch_user)
-            position = len(queue)
+            # 加入隊伍（訂閱者插入在訂閱者位置，觀眾加到末尾）
+            if is_subscriber:
+                # 訂閱者：找最後一個訂閱者位置，插入到他後面
+                insert_index = 0
+                for i, u in enumerate(queue):
+                    role = get_role_type(u)
+                    if role == "訂閱" or (isinstance(u, self.TwitchUser) and u.is_subscriber):
+                        insert_index = i + 1
+                queue.insert(insert_index, twitch_user)
+            else:
+                # 觀眾：直接加到末尾
+                queue.append(twitch_user)
+
+            position = queue.index(twitch_user) + 1
 
             # 在 Discord 發送公告訊息
             announcement = f"🎮 Twitch 觀眾 **{user_name}** 從台上打了 !上車！"
@@ -463,9 +474,22 @@ async def 上車(ctx):
         await ctx.send(f"🚗 {user.display_name} 已在排隊中！（第 {position} 位）")
         return
 
-    queue.append(user)
-    print(f"[指令-上車] {user.display_name} 成功加入，目前第 {len(queue)} 位")
-    await ctx.send(f"✅ {user.display_name} 成功上車，目前第 **{len(queue)} 位**")
+    # 根據身份插入位置（訂閱者優先）
+    role_type = get_role_type(user)
+    if role_type == "訂閱":
+        # 訂閱者：找最後一個訂閱者位置，插入到他後面
+        insert_index = 0
+        for i, u in enumerate(queue):
+            if get_role_type(u) == "訂閱":
+                insert_index = i + 1
+        queue.insert(insert_index, user)
+    else:
+        # 觀眾：直接加到末尾
+        queue.append(user)
+
+    position = queue.index(user) + 1
+    print(f"[指令-上車] {user.display_name} 成功加入，目前第 {position} 位")
+    await ctx.send(f"✅ {user.display_name} 成功上車，目前第 **{position} 位**")
 
 @bot.command()
 async def 跳車(ctx):
