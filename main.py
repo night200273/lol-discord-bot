@@ -320,7 +320,6 @@ async def run_twitch_bot():
             token=twitch_token,
             client_id=twitch_client_id,
             client_secret=twitch_client_secret,
-            bot_id=twitch_client_id,  # 使用 client_id 作為 bot_id
             nick=twitch_username,
             prefix="!",
             initial_channels=[twitch_channel]
